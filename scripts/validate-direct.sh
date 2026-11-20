@@ -3,8 +3,8 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "$0")/.." && pwd)"
 
 mode=dry-run
-version=1.8.1
-build_number=15
+version=1.8.2
+build_number=16
 usage() { echo "Usage: scripts/validate-direct.sh [--mode dry-run|release] [--version X.Y.Z] [--build N] APP_OR_DMG"; }
 while (($# > 0)); do
     case "$1" in

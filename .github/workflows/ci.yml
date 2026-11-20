@@ -20,5 +20,4 @@ jobs:
       - run: make check
       - run: make package-app-store-local
       - run: ./scripts/validate-app-store.sh
-      - run: make package-direct-dry-run
-      - run: bash scripts/test-updater.sh
+      - run: make check-direct
