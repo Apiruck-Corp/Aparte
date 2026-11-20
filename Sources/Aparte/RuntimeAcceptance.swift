@@ -1477,15 +1477,13 @@ enum RuntimeAcceptance {
         let pad = PadWindowController(document: document, defaults: defaults)
         let delegate = AppDelegate()
         delegate.configurePad(document: document, pad: pad)
-        let lifecycle: NSApplicationDelegate = delegate
         try Data("blocks creation of the draft folder".utf8).write(to: directory)
         pad.setMarkdownForRuntimeCheck("Keep this last edit")
-        let hasQuitHandler = delegate.responds(to: #selector(NSApplicationDelegate.applicationShouldTerminate(_:)))
         func tryQuit(choosing response: NSApplication.ModalResponse) -> NSApplication.TerminateReply {
-            if hasQuitHandler {
-                RunLoop.main.perform(inModes: [.modalPanel]) { NSApp.stopModal(withCode: response) }
+            RunLoop.main.perform(inModes: [.modalPanel]) {
+                MainActor.assumeIsolated { NSApp.stopModal(withCode: response) }
             }
-            return lifecycle.applicationShouldTerminate?(NSApp) ?? .terminateNow
+            return delegate.applicationShouldTerminate(NSApp)
         }
         check(tryQuit(choosing: .alertFirstButtonReturn) == .terminateCancel && pad.isVisible
               && document.lastSaveError != nil && document.markdown == "Keep this last edit",
@@ -1493,7 +1491,7 @@ enum RuntimeAcceptance {
         check(tryQuit(choosing: .alertSecondButtonReturn) == .terminateNow,
               "failed-quit-allows-explicit-discard")
         try FileManager.default.removeItem(at: directory)
-        let retry = lifecycle.applicationShouldTerminate?(NSApp) ?? .terminateNow
+        let retry = delegate.applicationShouldTerminate(NSApp)
         let saved = try store.load()
         check(retry == .terminateNow && document.lastSaveError == nil && saved == "Keep this last edit",
               "quit-retries-and-saves-pending-edit")

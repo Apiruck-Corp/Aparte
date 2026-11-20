@@ -103,8 +103,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         return false
     }
 
-    func applicationWillTerminate(_ notification: Notification) {
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         documentController?.saveNow(checkpoint: true)
+        guard let error = documentController?.lastSaveError else { return .terminateNow }
+        showPad()
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Aparte couldn’t save your draft."
+        alert.informativeText = "\(error.localizedDescription)\n\nKeep writing to copy your draft or use Save Markdown As before quitting."
+        alert.addButton(withTitle: "Keep Writing")
+        alert.addButton(withTitle: "Quit Without Saving").hasDestructiveAction = true
+        alert.window.level = NSWindow.Level(rawValue: NSWindow.Level.popUpMenu.rawValue + 1)
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
         hotKeyController?.invalidate()
         preferencesController?.closeSettings()
         if let escapeMonitor {

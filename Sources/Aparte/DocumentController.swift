@@ -54,11 +54,13 @@ final class DocumentController {
     func saveNow(checkpoint: Bool = false, preservingExactDraft: Bool = false) {
         saveWorkItem?.cancel()
         saveWorkItem = nil
-        // Opening or dismissing an untouched pad must not recreate cleared history.
+        // Rendering normalizes Markdown for the editor. Viewing a draft alone
+        // must never write that normalization (or a stale copy) back to disk.
+        guard hasEdited else { return }
         // The first edit checkpoints the launch-time wording before saving the new text.
         do {
             let checkpointDue = lastCheckpointAt.map { Date().timeIntervalSince($0) >= 60 } ?? true
-            if hasEdited && (checkpoint || checkpointDue) && markdown != lastCheckpointMarkdown { try checkpointNow(preservingExactDraft: preservingExactDraft) }
+            if (checkpoint || checkpointDue) && markdown != lastCheckpointMarkdown { try checkpointNow(preservingExactDraft: preservingExactDraft) }
         } catch { lastHistoryError = error }
         if let savedFileState, savedFileState == store.fileState { return }
         do {

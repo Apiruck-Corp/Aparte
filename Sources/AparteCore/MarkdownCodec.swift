@@ -24,7 +24,9 @@ public enum MarkdownCodec {
     public static func render(_ markdown: String) -> NSAttributedString {
         let baseAttributes = AparteTypography.baseAttributes
         let output = NSMutableAttributedString()
-        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map { rawLine in
+        let lines = markdown.split(omittingEmptySubsequences: false) {
+            $0 == "\n" || $0 == "\r\n" || $0 == "\r"
+        }.map { rawLine in
             let raw = String(rawLine)
             return Line(raw: raw, block: parseBlock(raw))
         }
@@ -107,8 +109,8 @@ public enum MarkdownCodec {
             // straddled the break would be parsed on separate physical lines
             // and come back as literal asterisks.
             let segments = content.filter { $0.length > 0 }
-            // Nothing but soft breaks: the block carries no text to write.
-            guard !segments.isEmpty else { continue }
+            // An unfinished item still has a visible marker and a list number.
+            guard !segments.isEmpty || block.marker != nil else { continue }
             let inline = segments
                 .map { serializeInline(attributedString, range: $0, ignoreBold: headingLevel > 0) }
                 .joined(separator: "  \n")
@@ -132,12 +134,12 @@ public enum MarkdownCodec {
         if let match = line.firstMatch(of: /^[-*+]\s+(.*)$/) {
             return Block(content: String(match.1), headingLevel: 0, list: .unordered, listNumber: 1, markerStemLength: 1)
         }
-        if let match = line.firstMatch(of: /^(\d+)\.\s+(.*)$/) {
+        if let match = line.firstMatch(of: /^([0-9]+)\.\s+(.*)$/), let number = Int(match.1) {
             return Block(
                 content: String(match.2),
                 headingLevel: 0,
                 list: .ordered,
-                listNumber: Int(match.1) ?? 1,
+                listNumber: number,
                 markerStemLength: match.1.count + 1
             )
         }

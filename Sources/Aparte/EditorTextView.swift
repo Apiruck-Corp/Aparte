@@ -444,7 +444,7 @@ final class EditorTextView: NSTextView {
         let paragraphRange = (string as NSString).paragraphRange(for: selectedRange())
         let source = string as NSString
         var lineRanges: [NSRange] = []
-        source.enumerateSubstrings(in: paragraphRange, options: [.byLines, .substringNotRequired]) {
+        source.enumerateSubstrings(in: paragraphRange, options: [.byParagraphs, .substringNotRequired]) {
             _, lineRange, _, _ in lineRanges.append(lineRange)
         }
         if lineRanges.isEmpty { lineRanges = [paragraphRange] }
