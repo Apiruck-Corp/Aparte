@@ -3,6 +3,33 @@ import XCTest
 @testable import AparteCore
 
 final class MarkdownCodecTests: XCTestCase {
+    func testWindowsAndClassicMacLineEndingsRestoreTheSameMarkdownAsLF() {
+        let markdown = "# Title\n\nFirst  \nsecond\n\n7. Seven\n8. Eight\n"
+        let expected = MarkdownCodec.render(markdown)
+        for ending in ["\r\n", "\r"] {
+            let rendered = MarkdownCodec.render(markdown.replacingOccurrences(of: "\n", with: ending))
+            XCTAssertEqual(rendered.string, expected.string)
+            XCTAssertEqual(MarkdownCodec.markdown(from: rendered), markdown)
+        }
+    }
+
+    func testUnfinishedListItemsKeepTheirPlaceAcrossReopening() {
+        for markdown in ["- ", "4. ", "- First\n- ", "4. First\n5. \n6. Last", "- \n\nBody"] {
+            let rendered = MarkdownCodec.render(markdown)
+            XCTAssertEqual(MarkdownCodec.markdown(from: rendered), markdown)
+            XCTAssertEqual(MarkdownCodec.render(MarkdownCodec.markdown(from: rendered)).string, rendered.string)
+        }
+    }
+
+    func testNumericPrefixesTheEditorTreatsAsTextKeepTheirDigits() {
+        for prefix in ["999999999999999999999999999999", "١٢٣"] {
+            let line = "\(prefix). Reference number"
+            XCTAssertNil(ListContinuation.marker(in: line))
+            XCTAssertEqual(MarkdownCodec.render(line).string, line)
+            XCTAssertEqual(MarkdownCodec.markdown(from: MarkdownCodec.render(line)), line)
+        }
+    }
+
     func testLiteralDelimitersInsideFormattingKeepTextAndLinkDestination() {
         let labels = ["A](example.com)B", "A**B", "<u>", "</u>", "A[B", #"A\*B"#, "A](https://other.example/path_(x))B"]
         for mask in 0..<16 {
