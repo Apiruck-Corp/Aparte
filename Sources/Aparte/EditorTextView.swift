@@ -200,11 +200,13 @@ final class EditorTextView: NSTextView {
     }
 
     override func paste(_ sender: Any?) {
-        guard let normalized = PasteNormalizer.read(from: .general) else {
-            super.paste(sender)
-            return
-        }
+        if !paste(from: .general) { super.paste(sender) }
+    }
+
+    func paste(from pasteboard: NSPasteboard) -> Bool {
+        guard let normalized = PasteNormalizer.read(from: pasteboard) else { return false }
         replaceSelection(with: normalized)
+        return true
     }
 
     @objc func copyAsPlainText(_ sender: Any?) {

@@ -75,7 +75,7 @@ public enum PasteNormalizer {
             attributes[.font] = AparteTypography.bodyFont
             output.replaceCharacters(in: range, with: NSAttributedString(string: marker, attributes: attributes))
         }
-        ParagraphFormatting.normalizeEditorTextInPlace(output)
+        ParagraphFormatting.normalizeEditorTextInPlace(output, preservingHorizontalWhitespace: true)
         return output
     }
 
@@ -109,11 +109,19 @@ public enum PasteNormalizer {
                          .webResourceLoadDelegate: DenyHTMLResources.shared],
                documentAttributes: nil
            ) {
+            // AppKit trims a terminal ASCII space even from a pre-wrapped span.
+            // Restore it only when the plain representation confirms that exact difference.
+            if let plain = pasteboard.string(forType: .string), plain.hasSuffix(" "),
+               plain.dropLast() == html.string {
+                let fragment = NSMutableAttributedString(attributedString: html)
+                fragment.append(NSAttributedString(string: " "))
+                return normalized(fragment)
+            }
             return normalized(html)
         }
         if let string = pasteboard.string(forType: .string) {
             let output = NSMutableAttributedString(string: string, attributes: AparteTypography.baseAttributes)
-            ParagraphFormatting.normalizeEditorTextInPlace(output)
+            ParagraphFormatting.normalizeEditorTextInPlace(output, preservingHorizontalWhitespace: true)
             return output
         }
         return nil

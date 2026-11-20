@@ -758,6 +758,8 @@ enum RuntimeAcceptance {
             editor.cutSelection(to: clipboard)
             check(clipboard.string(forType: .string) == "world" && clipboard.data(forType: .rtf) == nil
                   && editor.string == "hello ", "cut-writes-normalized-clipboard")
+            check(editor.paste(from: clipboard) && editor.string == "hello world",
+                  "pasting-cut-word-restores-line-without-extra-paragraph")
 
             editor.replaceAll(with: NSAttributedString(string: "Item", attributes: AparteTypography.baseAttributes))
             editor.setSelectedRange(NSRange(location: 2, length: 0))
