@@ -2,19 +2,15 @@ import Foundation
 
 public enum MarkdownFileExporter {
     public static func suggestedBaseName(for markdown: String) -> String {
-        guard let firstLine = markdown
-            .split(whereSeparator: \Character.isNewline)
-            .map({ String($0).trimmingCharacters(in: .whitespaces) })
-            .first(where: { !$0.isEmpty })
-        else {
+        let lines = markdown.split(whereSeparator: \Character.isNewline)
+        let titles = lines.lazy.map { line in
+            line.replacingOccurrences(of: #"^\s*(#{1,6}|[-*+]|[0-9]+\.)\s+"#,
+                                      with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
+        }
+        guard var name = titles.first(where: { !$0.isEmpty }) else {
             return "Aparte"
         }
-
-        var name = firstLine.replacingOccurrences(
-            of: "^(#{1,6}|[-*+]|[0-9]+\\.)\\s+",
-            with: "",
-            options: .regularExpression
-        )
         for marker in ["**", "__", "*", "_", "`", "<u>", "</u>"] {
             name = name.replacingOccurrences(of: marker, with: "")
         }
