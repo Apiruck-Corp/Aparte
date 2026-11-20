@@ -12,7 +12,7 @@ local document is waiting when you come back.
 or read the [product page](https://pocarles.com/aparte/).
 
 Version 1.8.2 keeps your draft open if you choose **Keep Writing** after a failed save on Quit. It also preserves unfinished list items when you reopen the pad and keeps pasted words on the same line.
-Read the [release notes](https://github.com/Apiruck-Corp/Aparte/releases/tag/v1.8.2).
+Read the [release notes](https://github.com/pocarles/Aparte/releases/tag/v1.8.2).
 
 ## What it does
 
