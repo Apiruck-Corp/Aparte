@@ -760,6 +760,12 @@ enum RuntimeAcceptance {
                   && editor.string == "hello ", "cut-writes-normalized-clipboard")
             check(editor.paste(from: clipboard) && editor.string == "hello world",
                   "pasting-cut-word-restores-line-without-extra-paragraph")
+            pad.setMarkdownForRuntimeCheck("Milk\n\nTea")
+            editor.setSelectedRange(NSRange(location: 0, length: 4))
+            editor.copySelection(to: clipboard)
+            editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+            check(editor.paste(from: clipboard) && editor.string == "Milk\nTeaMilk",
+                  "one-word-paragraph-selection-pastes-inline")
 
             editor.replaceAll(with: NSAttributedString(string: "Item", attributes: AparteTypography.baseAttributes))
             editor.setSelectedRange(NSRange(location: 2, length: 0))
@@ -946,6 +952,9 @@ enum RuntimeAcceptance {
                   "list-command-keeps-shift-return-inside-one-item")
             editor.makeBulletedList(nil)
             check(editor.string == "Best,\u{2028}Ada", "removing-list-keeps-shift-return")
+            editor.replaceAll(with: NSAttributedString(string: "• \u{2028}Ada", attributes: AparteTypography.baseAttributes))
+            editor.makeBulletedList(nil)
+            check(editor.string == "\u{2028}Ada", "removing-bullet-keeps-leading-shift-return")
 
             let longMarkdown = (1...120)
                 .map { "Paragraph \($0): enough text to exercise the native scroll view." }

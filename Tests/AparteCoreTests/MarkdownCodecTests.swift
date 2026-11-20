@@ -21,6 +21,18 @@ final class MarkdownCodecTests: XCTestCase {
         }
     }
 
+    func testLeadingAndConsecutiveSoftBreaksSurviveInsideAnItem() {
+        XCTAssertNil(ListContinuation.marker(in: "7.\u{2028}Ada"))
+        for (visible, markdown) in [("• ", "- "), ("7. ", "7. ")] {
+            let text = NSAttributedString(string: visible + "\u{2028}Ada\u{2028}\u{2028}Lee",
+                                          attributes: AparteTypography.baseAttributes)
+            XCTAssertEqual(ListContinuation.marker(in: text.string)?.prefix, visible)
+            let saved = MarkdownCodec.markdown(from: text)
+            XCTAssertEqual(saved, markdown + "  \nAda  \n  \nLee")
+            XCTAssertEqual(MarkdownCodec.render(saved).string, text.string)
+        }
+    }
+
     func testNumericPrefixesTheEditorTreatsAsTextKeepTheirDigits() {
         for prefix in ["999999999999999999999999999999", "١٢٣"] {
             let line = "\(prefix). Reference number"
