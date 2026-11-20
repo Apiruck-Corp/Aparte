@@ -2,6 +2,13 @@
 
 All notable changes appear here. The project follows semantic versioning.
 
+## 1.8.2 - 2026-11-20
+
+- If Aparte can't save when you quit, choose **Keep Writing** to keep the draft open so you can copy it or save it elsewhere. Closing a pad you only opened to read preserves any newer edits on disk.
+- An unfinished bullet or numbered item is still there when you reopen the pad. If you use Shift-Return between two lines in a list item, that break survives saving and changing the list style.
+- Pasting a word into a sentence keeps it on the same line. Formatted paste preserves spaces, tabs, and heading levels.
+- Markdown with Windows or classic Mac line endings reopens with its paragraphs and lists intact. When a draft starts with an empty list item, Aparte uses the first written line to name an export or title a post sent to your endpoint.
+
 ## 1.8.1 - 2026-09-28
 
 The first published release of pinning and recent versions. The 1.8.0 release
