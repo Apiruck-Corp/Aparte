@@ -380,12 +380,16 @@ public enum ParagraphFormatting {
 
     /// No font or size is exported: the receiving composer supplies typography.
     public static func html(from text: NSAttributedString) -> String {
+        html(from: text, forSelection: false)
+    }
+
+    public static func html(from text: NSAttributedString, forSelection: Bool) -> String {
         var result = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>"
         let source = text.string as NSString
         var openList: AparteListKind?
         for block in blocks(in: text) {
-            if block.range.length == text.length,
-               text.attribute(.aparteInlineOnly, at: 0, effectiveRange: nil) as? Bool == true {
+            if block.range.length == text.length, block.headingLevel == 0, block.marker == nil,
+               forSelection || text.attribute(.aparteInlineOnly, at: 0, effectiveRange: nil) as? Bool == true {
                 // A phrase copied from inside a paragraph should paste at the caret.
                 // A <p> here makes AppKit append a newline to even a single word.
                 result += "<span style=\"white-space:pre-wrap\">\(inlineHTML(text, source: source, range: block.range))</span>"

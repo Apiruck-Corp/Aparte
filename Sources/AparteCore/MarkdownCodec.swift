@@ -104,11 +104,10 @@ public enum MarkdownCodec {
 
             // A soft break with nothing after it carries no meaning. Dropping
             // it here keeps the round-trip from writing stray trailing spaces.
-            let content = trimmingTrailingSoftBreak(attributedString, range: visibleRange)
             // Each side of a soft break is its own inline run. A delimiter that
             // straddled the break would be parsed on separate physical lines
             // and come back as literal asterisks.
-            let segments = content.filter { $0.length > 0 }
+            let segments = trimmingTrailingSoftBreak(attributedString, range: visibleRange)
             // An unfinished item still has a visible marker and a list number.
             guard !segments.isEmpty || block.marker != nil else { continue }
             let inline = segments
@@ -266,6 +265,7 @@ public enum MarkdownCodec {
         while end > range.location, source.character(at: end - 1) == 0x2028 {
             end -= 1
         }
+        guard end > range.location else { return [] }
         var segments: [NSRange] = []
         var start = range.location
         var cursor = range.location

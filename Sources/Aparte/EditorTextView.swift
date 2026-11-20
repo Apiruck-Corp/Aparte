@@ -230,7 +230,7 @@ final class EditorTextView: NSTextView {
     func copyAllPreservingSelection(to pasteboard: NSPasteboard = .general) -> Bool {
         guard let textStorage, textStorage.length > 0 else { return false }
         let attributed = ParagraphFormatting.copyText(from: textStorage, range: NSRange(location: 0, length: textStorage.length))
-        return writeToPasteboard(attributed, pasteboard: pasteboard, verify: true)
+        return writeToPasteboard(attributed, pasteboard: pasteboard, wholeDocument: true)
     }
 
     func replaceAll(with attributedString: NSAttributedString) {
@@ -730,16 +730,16 @@ final class EditorTextView: NSTextView {
     private func writeToPasteboard(
         _ attributedString: NSAttributedString,
         pasteboard: NSPasteboard,
-        verify: Bool = false
+        wholeDocument: Bool = false
     ) -> Bool {
         let plainText = ParagraphFormatting.plainText(from: attributedString)
-        let html = ParagraphFormatting.html(from: attributedString)
+        let html = ParagraphFormatting.html(from: attributedString, forSelection: !wholeDocument)
         let previousChange = pasteboard.changeCount
         pasteboard.clearContents()
         let wrotePlainText = pasteboard.setString(plainText, forType: .string)
         let wroteHTML = pasteboard.setString(html, forType: .html)
         guard wrotePlainText && wroteHTML else { return false }
-        return !verify || (pasteboard.changeCount != previousChange
+        return !wholeDocument || (pasteboard.changeCount != previousChange
             && pasteboard.string(forType: .string) == plainText
             && pasteboard.string(forType: .html) == html)
     }

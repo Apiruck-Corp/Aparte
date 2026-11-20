@@ -194,13 +194,15 @@ final class MarkdownCodecTests: XCTestCase {
             ("- item  \ncontinuation", "• item\u{2028}continuation", "- item  \ncontinuation"),
             ("7. item  \ncontinuation", "7. item\u{2028}continuation", "7. item  \ncontinuation"),
             ("-  \ncontinuation", "-\u{2028}continuation", "-  \ncontinuation"),
-            ("7.  \ncontinuation", "7.\u{2028}continuation", "7. continuation"),
-            ("-   \ncontinuation", "• \u{2028}continuation", "- continuation"),
+            ("7.  \ncontinuation", "7.\u{2028}continuation", "7.  \ncontinuation"),
+            ("-   \ncontinuation", "• \u{2028}continuation", "-   \ncontinuation"),
         ]
         for item in cases {
             let rendered = MarkdownCodec.render(item.source)
             XCTAssertEqual(rendered.string, item.visible, item.source)
-            XCTAssertEqual(MarkdownCodec.markdown(from: rendered), item.canonical, item.source)
+            let saved = MarkdownCodec.markdown(from: rendered)
+            XCTAssertEqual(saved, item.canonical, item.source)
+            XCTAssertEqual(MarkdownCodec.render(saved).string, item.visible, item.source)
         }
     }
 

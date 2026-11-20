@@ -1491,9 +1491,11 @@ enum RuntimeAcceptance {
         try Data("blocks creation of the draft folder".utf8).write(to: directory)
         pad.setMarkdownForRuntimeCheck("Keep this last edit")
         func tryQuit(choosing response: NSApplication.ModalResponse) -> NSApplication.TerminateReply {
-            RunLoop.main.perform(inModes: [.modalPanel]) {
+            let choice = BlockOperation {
                 MainActor.assumeIsolated { NSApp.stopModal(withCode: response) }
             }
+            RunLoop.main.perform(inModes: [.modalPanel]) { choice.start() }
+            defer { choice.cancel() }
             return delegate.applicationShouldTerminate(NSApp)
         }
         check(tryQuit(choosing: .alertFirstButtonReturn) == .terminateCancel && pad.isVisible
