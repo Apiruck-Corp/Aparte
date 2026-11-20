@@ -18,27 +18,23 @@ public enum PasteNormalizer {
         guard input.length > 0 else { return output }
 
         input.enumerateAttributes(in: NSRange(location: 0, length: input.length)) { attributes, range, _ in
-            var font = AparteTypography.bodyFont
-            if let sourceFont = attributes[.font] as? NSFont {
-                let traits = NSFontManager.shared.traits(of: sourceFont)
-                if traits.contains(.boldFontMask) {
-                    font = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
-                }
-                if traits.contains(.italicFontMask) {
-                    font = NSFontManager.shared.convert(font, toHaveTrait: .italicFontMask)
-                }
-                output.addAttribute(.font, value: font, range: range)
-
-                if sourceFont.pointSize >= 22 {
-                    // A pasted heading is bold by nature; only italic carries over inline.
-                    let level = sourceFont.pointSize >= 28 ? 1 : 2
-                    let inline = traits.intersection(.italicFontMask)
-                    output.addAttributes(
-                        [.font: AparteTypography.font(headingLevel: level, traits: inline),
-                         .aparteHeadingLevel: level, .aparteInlineBold: false],
-                        range: range
-                    )
-                }
+            let sourceFont = attributes[.font] as? NSFont
+            let traits = sourceFont.map { NSFontManager.shared.traits(of: $0) } ?? []
+            let headerLevel = (attributes[.paragraphStyle] as? NSParagraphStyle)?.headerLevel ?? 0
+            let size = sourceFont?.pointSize ?? 0
+            // AppKit retains the HTML heading level even when CSS changes its size.
+            // Some rich-text sources supply only a font, so keep the size fallback.
+            let hasHeadingLevel = (1...6).contains(headerLevel)
+            if hasHeadingLevel || size >= 22 {
+                let level = hasHeadingLevel ? headerLevel : (size >= 28 ? 1 : 2)
+                let inline = traits.intersection(.italicFontMask)
+                output.addAttributes(
+                    [.font: AparteTypography.font(headingLevel: level, traits: inline),
+                     .aparteHeadingLevel: level, .aparteInlineBold: false],
+                    range: range
+                )
+            } else if sourceFont != nil {
+                output.addAttribute(.font, value: AparteTypography.font(headingLevel: nil, traits: traits), range: range)
             }
 
             if let underline = attributes[.underlineStyle] as? Int, underline != 0 {
@@ -79,7 +75,7 @@ public enum PasteNormalizer {
             attributes[.font] = AparteTypography.bodyFont
             output.replaceCharacters(in: range, with: NSAttributedString(string: marker, attributes: attributes))
         }
-        ParagraphFormatting.normalizeEditorTextInPlace(output)
+        ParagraphFormatting.normalizeEditorTextInPlace(output, preservingHorizontalWhitespace: true)
         return output
     }
 
@@ -113,11 +109,19 @@ public enum PasteNormalizer {
                          .webResourceLoadDelegate: DenyHTMLResources.shared],
                documentAttributes: nil
            ) {
+            // AppKit trims a terminal ASCII space even from a pre-wrapped span.
+            // Restore it only when the plain representation confirms that exact difference.
+            if let plain = pasteboard.string(forType: .string), plain.hasSuffix(" "),
+               plain.dropLast() == html.string {
+                let fragment = NSMutableAttributedString(attributedString: html)
+                fragment.append(NSAttributedString(string: " "))
+                return normalized(fragment)
+            }
             return normalized(html)
         }
         if let string = pasteboard.string(forType: .string) {
             let output = NSMutableAttributedString(string: string, attributes: AparteTypography.baseAttributes)
-            ParagraphFormatting.normalizeEditorTextInPlace(output)
+            ParagraphFormatting.normalizeEditorTextInPlace(output, preservingHorizontalWhitespace: true)
             return output
         }
         return nil

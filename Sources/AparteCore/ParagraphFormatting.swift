@@ -34,14 +34,15 @@ public enum ParagraphFormatting {
         contentsEnd: Int
     ) -> Block? {
         let range = NSRange(location: start, length: contentsEnd - start)
+        guard range.length > 0 else { return nil }
         let line = source.substring(with: range)
+        let attributes = text.attributes(at: start, effectiveRange: nil)
+        let inlineOnly = attributes[.aparteInlineOnly] as? Bool == true
         // A soft break is content even when nothing follows it, so a block
         // that is only U+2028 survives. Other blank rows stay spacing.
         let hasContent = line.contains("\u{2028}")
             || !line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        guard hasContent else { return nil }
-        let attributes = text.attributes(at: start, effectiveRange: nil)
-        let inlineOnly = attributes[.aparteInlineOnly] as? Bool == true
+        guard hasContent || inlineOnly else { return nil }
         return Block(
             range: range,
             marker: inlineOnly ? nil : ListContinuation.marker(in: line),
@@ -109,10 +110,12 @@ public enum ParagraphFormatting {
     /// rows, paragraph separators, and structural paragraph styles change.
     static func normalizeEditorTextInPlace(
         _ storage: NSMutableAttributedString,
-        paragraphStylesAreCanonical: Bool = true
+        paragraphStylesAreCanonical: Bool = true,
+        preservingHorizontalWhitespace: Bool = false
     ) {
         let originalBlocks = blocks(in: storage)
         guard let first = originalBlocks.first, let last = originalBlocks.last else {
+            if preservingHorizontalWhitespace, storage.string.rangeOfCharacter(from: .newlines) == nil { return }
             storage.deleteCharacters(in: NSRange(location: 0, length: storage.length))
             return
         }
@@ -377,10 +380,21 @@ public enum ParagraphFormatting {
 
     /// No font or size is exported: the receiving composer supplies typography.
     public static func html(from text: NSAttributedString) -> String {
+        html(from: text, forSelection: false)
+    }
+
+    public static func html(from text: NSAttributedString, forSelection: Bool) -> String {
         var result = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"></head><body>"
         let source = text.string as NSString
         var openList: AparteListKind?
         for block in blocks(in: text) {
+            if block.range.length == text.length, block.headingLevel == 0, block.marker == nil,
+               forSelection || text.attribute(.aparteInlineOnly, at: 0, effectiveRange: nil) as? Bool == true {
+                // A phrase copied from inside a paragraph should paste at the caret.
+                // A <p> here makes AppKit append a newline to even a single word.
+                result += "<span style=\"white-space:pre-wrap\">\(inlineHTML(text, source: source, range: block.range))</span>"
+                continue
+            }
             let kind = block.marker?.kind
             if openList != kind {
                 if let openList { result += openList == .ordered ? "</ol>" : "</ul>" }

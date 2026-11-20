@@ -12,6 +12,34 @@ public enum MarkdownCodec {
     private struct Line {
         let raw: String
         let block: Block
+
+        init(_ text: Substring) {
+            raw = String(text)
+            block = parseBlock(raw)
+        }
+
+        func resolved(before next: Block?) -> (content: String, list: AparteListKind?, hardBreak: Bool) {
+            // ATX headings end at the newline. Only an ordinary following line
+            // can continue the current paragraph or list item.
+            let continues = next.map { !$0.content.isEmpty && $0.headingLevel == 0 && $0.list == nil } ?? false
+            guard block.headingLevel == 0, continues, raw.hasSuffix("  ") else {
+                return (block.content, block.list, false)
+            }
+            if block.content.hasSuffix("  ") {
+                return (String(block.content.dropLast(2)), block.list, true)
+            }
+            if block.list != nil {
+                // If both spaces belonged to the break, there is no separator
+                // after the apparent marker. The digits or dash are literal.
+                let stripped = String(raw.dropLast(2))
+                if stripped.count <= block.markerStemLength { return (stripped, nil, true) }
+            }
+            return (block.content, block.list, true)
+        }
+    }
+
+    static func lineContent(_ text: Substring, followedBy next: Substring?) -> String {
+        Line(text).resolved(before: next.map { parseBlock(String($0)) }).content
     }
 
     private struct InlineToken {
@@ -24,38 +52,16 @@ public enum MarkdownCodec {
     public static func render(_ markdown: String) -> NSAttributedString {
         let baseAttributes = AparteTypography.baseAttributes
         let output = NSMutableAttributedString()
-        let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map { rawLine in
-            let raw = String(rawLine)
-            return Line(raw: raw, block: parseBlock(raw))
-        }
+        let lines = markdown.split(omittingEmptySubsequences: false) {
+            $0 == "\n" || $0 == "\r\n" || $0 == "\r"
+        }.map(Line.init)
 
         for index in lines.indices {
-            let raw = lines[index].raw
-            let block = lines[index].block
-            // CommonMark ends an ATX heading at its newline, so trailing spaces
-            // there are not a hard break. Otherwise a break joins this line to
-            // the next unless that line starts its own block. A list item's
-            // continuation has no marker of its own.
+            let line = lines[index]
+            let block = line.block
             let next = index + 1 < lines.count ? lines[index + 1].block : nil
-            let continues = next.map { !$0.content.isEmpty && $0.headingLevel == 0 && $0.list == nil } ?? false
-            let hardBreak = block.headingLevel == 0 && continues && raw.hasSuffix("  ")
-            var content = block.content
-            var list = block.list
-            var listNumber = block.listNumber
-            if hardBreak, content.hasSuffix("  ") {
-                content.removeLast(2)
-            } else if hardBreak, list != nil {
-                // The spaces may be the list marker's required separator rather
-                // than content. If stripping them removes that separator, the
-                // original parser treated the remainder as plain text.
-                let stripped = String(raw.dropLast(2))
-                if stripped.count <= block.markerStemLength {
-                    content = stripped
-                    list = nil
-                    listNumber = 1
-                }
-            }
-            let rendered = renderInline(content, baseAttributes: baseAttributes)
+            let resolved = line.resolved(before: next)
+            let rendered = renderInline(resolved.content, baseAttributes: baseAttributes)
 
             if block.headingLevel > 0 {
                 AparteTypography.applyHeadingTypography(
@@ -65,14 +71,14 @@ public enum MarkdownCodec {
                 )
             }
 
-            if let list {
-                let marker = list == .unordered ? "• " : "\(listNumber). "
+            if let list = resolved.list {
+                let marker = list == .unordered ? "• " : "\(block.listNumber). "
                 rendered.insert(NSAttributedString(string: marker, attributes: baseAttributes), at: 0)
             }
 
             output.append(rendered)
             if index < lines.count - 1 {
-                let separator = hardBreak ? "\u{2028}" : "\n"
+                let separator = resolved.hardBreak ? "\u{2028}" : "\n"
                 output.append(NSAttributedString(string: separator, attributes: baseAttributes))
             }
         }
@@ -102,13 +108,12 @@ public enum MarkdownCodec {
 
             // A soft break with nothing after it carries no meaning. Dropping
             // it here keeps the round-trip from writing stray trailing spaces.
-            let content = trimmingTrailingSoftBreak(attributedString, range: visibleRange)
             // Each side of a soft break is its own inline run. A delimiter that
             // straddled the break would be parsed on separate physical lines
             // and come back as literal asterisks.
-            let segments = content.filter { $0.length > 0 }
-            // Nothing but soft breaks: the block carries no text to write.
-            guard !segments.isEmpty else { continue }
+            let segments = trimmingTrailingSoftBreak(attributedString, range: visibleRange)
+            // An unfinished item still has a visible marker and a list number.
+            guard !segments.isEmpty || block.marker != nil else { continue }
             let inline = segments
                 .map { serializeInline(attributedString, range: $0, ignoreBold: headingLevel > 0) }
                 .joined(separator: "  \n")
@@ -132,12 +137,12 @@ public enum MarkdownCodec {
         if let match = line.firstMatch(of: /^[-*+]\s+(.*)$/) {
             return Block(content: String(match.1), headingLevel: 0, list: .unordered, listNumber: 1, markerStemLength: 1)
         }
-        if let match = line.firstMatch(of: /^(\d+)\.\s+(.*)$/) {
+        if let match = line.firstMatch(of: /^([0-9]+)\.\s+(.*)$/), let number = Int(match.1) {
             return Block(
                 content: String(match.2),
                 headingLevel: 0,
                 list: .ordered,
-                listNumber: Int(match.1) ?? 1,
+                listNumber: number,
                 markerStemLength: match.1.count + 1
             )
         }
@@ -264,6 +269,7 @@ public enum MarkdownCodec {
         while end > range.location, source.character(at: end - 1) == 0x2028 {
             end -= 1
         }
+        guard end > range.location else { return [] }
         var segments: [NSRange] = []
         var start = range.location
         var cursor = range.location

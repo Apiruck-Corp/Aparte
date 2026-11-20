@@ -3,6 +3,45 @@ import XCTest
 @testable import AparteCore
 
 final class MarkdownCodecTests: XCTestCase {
+    func testWindowsAndClassicMacLineEndingsRestoreTheSameMarkdownAsLF() {
+        let markdown = "# Title\n\nFirst  \nsecond\n\n7. Seven\n8. Eight\n"
+        let expected = MarkdownCodec.render(markdown)
+        for ending in ["\r\n", "\r"] {
+            let rendered = MarkdownCodec.render(markdown.replacingOccurrences(of: "\n", with: ending))
+            XCTAssertEqual(rendered.string, expected.string)
+            XCTAssertEqual(MarkdownCodec.markdown(from: rendered), markdown)
+        }
+    }
+
+    func testUnfinishedListItemsKeepTheirPlaceAcrossReopening() {
+        for markdown in ["- ", "4. ", "- First\n- ", "4. First\n5. \n6. Last", "- \n\nBody"] {
+            let rendered = MarkdownCodec.render(markdown)
+            XCTAssertEqual(MarkdownCodec.markdown(from: rendered), markdown)
+            XCTAssertEqual(MarkdownCodec.render(MarkdownCodec.markdown(from: rendered)).string, rendered.string)
+        }
+    }
+
+    func testLeadingAndConsecutiveSoftBreaksSurviveInsideAnItem() {
+        XCTAssertNil(ListContinuation.marker(in: "7.\u{2028}Ada"))
+        for (visible, markdown) in [("• ", "- "), ("7. ", "7. ")] {
+            let text = NSAttributedString(string: visible + "\u{2028}Ada\u{2028}\u{2028}Lee",
+                                          attributes: AparteTypography.baseAttributes)
+            XCTAssertEqual(ListContinuation.marker(in: text.string)?.prefix, visible)
+            let saved = MarkdownCodec.markdown(from: text)
+            XCTAssertEqual(saved, markdown + "  \nAda  \n  \nLee")
+            XCTAssertEqual(MarkdownCodec.render(saved).string, text.string)
+        }
+    }
+
+    func testNumericPrefixesTheEditorTreatsAsTextKeepTheirDigits() {
+        for prefix in ["999999999999999999999999999999", "١٢٣"] {
+            let line = "\(prefix). Reference number"
+            XCTAssertNil(ListContinuation.marker(in: line))
+            XCTAssertEqual(MarkdownCodec.render(line).string, line)
+            XCTAssertEqual(MarkdownCodec.markdown(from: MarkdownCodec.render(line)), line)
+        }
+    }
+
     func testLiteralDelimitersInsideFormattingKeepTextAndLinkDestination() {
         let labels = ["A](example.com)B", "A**B", "<u>", "</u>", "A[B", #"A\*B"#, "A](https://other.example/path_(x))B"]
         for mask in 0..<16 {
@@ -155,13 +194,15 @@ final class MarkdownCodecTests: XCTestCase {
             ("- item  \ncontinuation", "• item\u{2028}continuation", "- item  \ncontinuation"),
             ("7. item  \ncontinuation", "7. item\u{2028}continuation", "7. item  \ncontinuation"),
             ("-  \ncontinuation", "-\u{2028}continuation", "-  \ncontinuation"),
-            ("7.  \ncontinuation", "7.\u{2028}continuation", "7. continuation"),
-            ("-   \ncontinuation", "• \u{2028}continuation", "- continuation"),
+            ("7.  \ncontinuation", "7.\u{2028}continuation", "7.  \ncontinuation"),
+            ("-   \ncontinuation", "• \u{2028}continuation", "-   \ncontinuation"),
         ]
         for item in cases {
             let rendered = MarkdownCodec.render(item.source)
             XCTAssertEqual(rendered.string, item.visible, item.source)
-            XCTAssertEqual(MarkdownCodec.markdown(from: rendered), item.canonical, item.source)
+            let saved = MarkdownCodec.markdown(from: rendered)
+            XCTAssertEqual(saved, item.canonical, item.source)
+            XCTAssertEqual(MarkdownCodec.render(saved).string, item.visible, item.source)
         }
     }
 

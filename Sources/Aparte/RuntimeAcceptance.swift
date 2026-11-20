@@ -51,6 +51,17 @@ enum RuntimeAcceptance {
         do {
             let store = try PersistenceStore(fileURL: fileURL)
             let document = try DocumentController(store: store)
+            let untouchedStore = try PersistenceStore(fileURL: root.appendingPathComponent("untouched/aparte.md"))
+            let originalMarkdown = "Line one\nLine two\n\n\nLine three\n"
+            try untouchedStore.save(originalMarkdown)
+            let untouchedDocument = try DocumentController(store: untouchedStore)
+            untouchedDocument.saveNow(checkpoint: true)
+            let untouchedMarkdown = try untouchedStore.load()
+            check(untouchedMarkdown == originalMarkdown, "dismiss-without-edit-preserves-original-file")
+            try untouchedStore.save("More recent writing from another instance")
+            untouchedDocument.saveNow(checkpoint: true)
+            let otherWriting = try untouchedStore.load()
+            check(otherWriting == "More recent writing from another instance", "untouched-pad-leaves-newer-writing-alone")
             // Save caching must not hide a failed write or a changed/missing file.
             let cacheStore = try PersistenceStore(fileURL: root.appendingPathComponent("cache/aparte.md"))
             let cacheDocument = try DocumentController(store: cacheStore)
@@ -747,6 +758,14 @@ enum RuntimeAcceptance {
             editor.cutSelection(to: clipboard)
             check(clipboard.string(forType: .string) == "world" && clipboard.data(forType: .rtf) == nil
                   && editor.string == "hello ", "cut-writes-normalized-clipboard")
+            check(editor.paste(from: clipboard) && editor.string == "hello world",
+                  "pasting-cut-word-restores-line-without-extra-paragraph")
+            pad.setMarkdownForRuntimeCheck("Milk\n\nTea")
+            editor.setSelectedRange(NSRange(location: 0, length: 4))
+            editor.copySelection(to: clipboard)
+            editor.setSelectedRange(NSRange(location: editor.string.utf16.count, length: 0))
+            check(editor.paste(from: clipboard) && editor.string == "Milk\nTeaMilk",
+                  "one-word-paragraph-selection-pastes-inline")
 
             editor.replaceAll(with: NSAttributedString(string: "Item", attributes: AparteTypography.baseAttributes))
             editor.setSelectedRange(NSRange(location: 2, length: 0))
@@ -851,6 +870,9 @@ enum RuntimeAcceptance {
                 editor.undoManager?.removeAllActions()
                 editor.insertNewline(nil)
                 check(editor.string == expected, "list-return-\(source.prefix(1))")
+                document.saveNow()
+                let reopenedList = try DocumentController(store: store)
+                check(reopenedList.attributedText.string == expected, "unfinished-list-reopens-at-next-item-\(source.prefix(1))")
                 drainRunLoop(for: 0.05)
                 pad.undoForRuntimeCheck()
                 check(editor.string == original, "list-return-single-undo-\(source.prefix(1))")
@@ -925,6 +947,14 @@ enum RuntimeAcceptance {
             editor.insertLineBreak(nil)
             editor.insertText("Ada", replacementRange: editor.selectedRange())
             check(editor.string.contains("\u{2028}") && document.markdown == "Best,  \nAda", "shift-return-inserts-soft-break")
+            editor.makeBulletedList(nil)
+            check(editor.string == "• Best,\u{2028}Ada" && document.markdown == "- Best,  \nAda",
+                  "list-command-keeps-shift-return-inside-one-item")
+            editor.makeBulletedList(nil)
+            check(editor.string == "Best,\u{2028}Ada", "removing-list-keeps-shift-return")
+            editor.replaceAll(with: NSAttributedString(string: "• \u{2028}Ada", attributes: AparteTypography.baseAttributes))
+            editor.makeBulletedList(nil)
+            check(editor.string == "\u{2028}Ada", "removing-bullet-keeps-leading-shift-return")
 
             let longMarkdown = (1...120)
                 .map { "Paragraph \($0): enough text to exercise the native scroll view." }
@@ -1421,6 +1451,7 @@ enum RuntimeAcceptance {
             }
             drainRunLoop(for: 0.3)
             check(reliable, "twenty-show-hide-cycles")
+            try checkQuitWithUnsavedDraft(root: root, defaults: defaults) { check($0, $1) }
             if ProcessInfo.processInfo.arguments.contains("--measure-idle") {
                 print("APARTE_IDLE_READY")
                 fflush(stdout)
@@ -1446,6 +1477,38 @@ enum RuntimeAcceptance {
             print(output)
         }
         return failed.isEmpty ? 0 : 1
+    }
+
+    private static func checkQuitWithUnsavedDraft(
+        root: URL, defaults: UserDefaults, check: (Bool, String) -> Void
+    ) throws {
+        let directory = root.appendingPathComponent("quit-test")
+        let store = try PersistenceStore(fileURL: directory.appendingPathComponent("aparte.md"))
+        let document = try DocumentController(store: store)
+        let pad = PadWindowController(document: document, defaults: defaults)
+        let delegate = AppDelegate()
+        delegate.configurePad(document: document, pad: pad)
+        try Data("blocks creation of the draft folder".utf8).write(to: directory)
+        pad.setMarkdownForRuntimeCheck("Keep this last edit")
+        func tryQuit(choosing response: NSApplication.ModalResponse) -> NSApplication.TerminateReply {
+            let choice = BlockOperation {
+                MainActor.assumeIsolated { NSApp.stopModal(withCode: response) }
+            }
+            RunLoop.main.perform(inModes: [.modalPanel]) { choice.start() }
+            defer { choice.cancel() }
+            return delegate.applicationShouldTerminate(NSApp)
+        }
+        check(tryQuit(choosing: .alertFirstButtonReturn) == .terminateCancel && pad.isVisible
+              && document.lastSaveError != nil && document.markdown == "Keep this last edit",
+              "failed-quit-keeps-unsaved-draft-open")
+        check(tryQuit(choosing: .alertSecondButtonReturn) == .terminateNow,
+              "failed-quit-allows-explicit-discard")
+        try FileManager.default.removeItem(at: directory)
+        let retry = delegate.applicationShouldTerminate(NSApp)
+        let saved = try store.load()
+        check(retry == .terminateNow && document.lastSaveError == nil && saved == "Keep this last edit",
+              "quit-retries-and-saves-pending-edit")
+        delegate.hidePad()
     }
 
     private static func runInteractivePreview(for seconds: TimeInterval) {

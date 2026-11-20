@@ -41,7 +41,7 @@ public enum ListContinuation {
         }
         let whitespaceStart = line.index(after: index)
         guard whitespaceStart < line.endIndex,
-              line[whitespaceStart].isWhitespace else {
+              line[whitespaceStart].isWhitespace, !line[whitespaceStart].isNewline else {
             return nil
         }
         let prefix = prefixConsumingWhitespace(in: line, from: line.index(after: whitespaceStart))
@@ -57,7 +57,7 @@ public enum ListContinuation {
     /// `from` is the first character after the required marker whitespace.
     private static func prefixConsumingWhitespace(in line: String, from start: String.Index) -> String {
         var end = start
-        while end < line.endIndex, line[end].isWhitespace {
+        while end < line.endIndex, line[end].isWhitespace, !line[end].isNewline {
             end = line.index(after: end)
         }
         return String(line[..<end])

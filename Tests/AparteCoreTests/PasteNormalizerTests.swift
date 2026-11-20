@@ -3,6 +3,56 @@ import XCTest
 @testable import AparteCore
 
 final class PasteNormalizerTests: XCTestCase {
+    func testRichClipboardFragmentsPasteInlineWithSelectedWhitespaceAndEmphasis() throws {
+        let source = MarkdownCodec.render("Before  **word**  \t after")
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        for selection in ["word", "  word  ", "  \t "] {
+            let range = (source.string as NSString).range(of: selection)
+            let fragment = ParagraphFormatting.copyText(from: source, range: range)
+            let plain = ParagraphFormatting.plainText(from: fragment)
+            XCTAssertEqual(plain, selection)
+            board.clearContents()
+            board.setString(plain, forType: .string)
+            board.setString(ParagraphFormatting.html(from: fragment), forType: .html)
+            let pasted = try XCTUnwrap(PasteNormalizer.read(from: board))
+            XCTAssertEqual(pasted.string, selection)
+            let word = (pasted.string as NSString).range(of: "word")
+            if word.location != NSNotFound {
+                XCTAssertTrue(AparteTypography.inlineTraits(in: pasted.attributes(at: word.location, effectiveRange: nil))
+                    .contains(.boldFontMask))
+            }
+        }
+    }
+
+    func testPlainClipboardPreservesSpacesAndTabsForInsertion() throws {
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        board.setString("  \t", forType: .string)
+        XCTAssertEqual(try XCTUnwrap(PasteNormalizer.read(from: board)).string, "  \t")
+    }
+
+    func testCopyingHeadingsBackIntoAparteKeepsTheirLevels() throws {
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        let markdown = (1...6).map { String(repeating: "#", count: $0) + " Heading \($0)" }
+            .joined(separator: "\n\n") + "\n\nBody"
+        let html = ParagraphFormatting.html(from: MarkdownCodec.render(markdown))
+        board.setString(html, forType: .html)
+        let pasted = try XCTUnwrap(PasteNormalizer.read(from: board))
+        XCTAssertEqual(MarkdownCodec.markdown(from: pasted).trimmingCharacters(in: .newlines), markdown)
+    }
+
+    func testPastedHeadingWithSmallSourceFontKeepsItsLevelAndItalic() throws {
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        board.setString("<h2 style='font-size:12px'><em>Small subtitle</em></h2>", forType: .html)
+        let pasted = try XCTUnwrap(PasteNormalizer.read(from: board))
+        XCTAssertEqual(MarkdownCodec.markdown(from: pasted).trimmingCharacters(in: .newlines), "## *Small subtitle*")
+        let font = try XCTUnwrap(pasted.attribute(.font, at: 0, effectiveRange: nil) as? NSFont)
+        XCTAssertEqual(font.pointSize, AparteTypography.headingSize(level: 2))
+    }
+
     func testGeneratedMarkerSeparatorsDoNotChangePrefixMatching() {
         for marker in ["7.", "•"] {
             for generated in [marker, "\t" + marker, marker + "\t", " \t" + marker + "\t "] {
