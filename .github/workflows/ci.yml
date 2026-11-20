@@ -18,6 +18,5 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: make check
-      - run: make package-app-store-local
-      - run: ./scripts/validate-app-store.sh
+      - run: make check-app-store
       - run: make check-direct
