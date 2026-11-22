@@ -2,6 +2,11 @@
 
 All notable changes appear here. The project follows semantic versioning.
 
+## 1.9.0 - 2026-11-22
+
+- While Aparte is running, pause the pointer in a corner of any display to bring back your draft. Choose a corner you don’t already use in **Settings → Hot corner**. The feature starts off.
+- Quick passes and drags leave the pad closed. If you’ve pinned the pad, the gesture brings it into focus where you left it.
+
 ## 1.8.2 - 2026-11-20
 
 - If Aparte can't save when you quit, choose **Keep Writing** to keep the draft open so you can copy it or save it elsewhere. Closing a pad you only opened to read preserves any newer edits on disk.

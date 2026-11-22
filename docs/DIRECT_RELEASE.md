@@ -29,13 +29,13 @@ For tag pushes, the workflow uploads the DMG, checksum, and signed `appcast.xml`
 
 Version 1.2.1 and earlier releases have no updater. Existing users must install the first updater-enabled release manually. Before publishing it, complete the direct-update checks in [manual acceptance](manual-acceptance.md), including an actual signed upgrade from an older test build. Local packaging checks do not prove installation or notarization.
 
-## 1.8.2 release metadata
+## 1.9.0 release metadata
 
-Version 1.8.2, build 16, is dated 2026-11-20. The app manifest, direct-package
+Version 1.9.0, build 17, is dated 2026-11-22. The app manifest, direct-package
 defaults, validator defaults, and manual workflow inputs use these values.
 Tagged releases read the build number from `Support/Info.plist` and require the
 tag version to match the manifest. Run `make check` and `make check-direct` before
-tagging `v1.8.2`. The tagged workflow signs, notarizes and publishes the release.
+tagging `v1.9.0`. The tagged workflow signs, notarizes and publishes the release.
 
 ## 1.1.0 packaging verification
 

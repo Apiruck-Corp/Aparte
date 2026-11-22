@@ -11,8 +11,8 @@ local document is waiting when you come back.
 [Download the latest release](https://github.com/pocarles/Aparte/releases/latest/download/Aparte.dmg)
 or read the [product page](https://pocarles.com/aparte/).
 
-Version 1.8.2 keeps your draft open if you choose **Keep Writing** after a failed save on Quit. It also preserves unfinished list items when you reopen the pad and keeps pasted words on the same line.
-Read the [release notes](https://github.com/pocarles/Aparte/releases/tag/v1.8.2).
+Version 1.9.0 lets you bring back your draft by pausing the pointer in a corner of any display. Choose a free corner in **Settings → Hot corner**. It starts off.
+Read the [release notes](https://github.com/pocarles/Aparte/releases/tag/v1.9.0).
 
 ## What it does
 
