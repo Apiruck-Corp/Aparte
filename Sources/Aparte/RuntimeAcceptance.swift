@@ -107,7 +107,9 @@ enum RuntimeAcceptance {
             guard let defaults = UserDefaults(suiteName: defaultsName) else { return 1 }
             defer { defaults.removePersistentDomain(forName: defaultsName) }
             let loginService = AcceptanceLoginService()
-            let preferences = PreferencesController(hotKeyController: nil, launchAtLoginService: loginService)
+            let hotCorners = HotCornerController(defaults: defaults, action: {})
+            defer { hotCorners.invalidate() }
+            let preferences = PreferencesController(hotKeyController: nil, hotCornerController: hotCorners, launchAtLoginService: loginService)
             check(preferences.launchAtLoginState == .disabled, "login-default-disabled")
             _ = preferences.setLaunchAtLoginEnabled(true)
             check(preferences.launchAtLoginEnabled && loginService.registerCalls == 1, "login-enable-uses-service")
@@ -124,7 +126,7 @@ enum RuntimeAcceptance {
             } else { failed.append("login-failure-keeps-system-state") }
 
             var openedLoginItems = 0
-            let settings = PreferencesController(hotKeyController: nil, launchAtLoginService: loginService,
+            let settings = PreferencesController(hotKeyController: nil, hotCornerController: hotCorners, launchAtLoginService: loginService,
                                                  openLoginItems: { openedLoginItems += 1 })
             loginService.shouldFail = false
             settings.showSettings()
@@ -134,6 +136,48 @@ enum RuntimeAcceptance {
                 .first { $0.identifier?.rawValue == "hot-corner" }
             check(cornerMenu?.titleOfSelectedItem == "Off" && cornerMenu?.numberOfItems == 5,
                   "settings-offers-four-hot-corners-and-defaults-to-off")
+            if let cornerMenu {
+                cornerMenu.selectItem(withTitle: "Bottom right")
+                cornerMenu.sendAction(cornerMenu.action, to: cornerMenu.target)
+                let reopened = HotCornerController(defaults: defaults, action: {})
+                check(hotCorners.selection == .bottomRight && reopened.selection == .bottomRight,
+                      "settings-corner-survives-relaunch")
+                reopened.invalidate()
+                cornerMenu.selectItem(withTitle: "Off")
+                cornerMenu.sendAction(cornerMenu.action, to: cornerMenu.target)
+                check(hotCorners.selection == .off, "settings-corner-can-be-turned-off")
+            }
+
+            let frames = [NSRect(x: 0, y: 0, width: 1600, height: 900),
+                          NSRect(x: -1280, y: -300, width: 1280, height: 800)]
+            let outside = NSPoint(x: 400, y: 400)
+            let first = NSPoint(x: 1598, y: 2), second = NSPoint(x: -2, y: -298)
+            var hover = HotCornerHover()
+            let corners: [(HotCorner, NSPoint)] = [
+                (.topLeft, NSPoint(x: 2, y: 898)), (.topRight, NSPoint(x: 1598, y: 898)),
+                (.bottomLeft, NSPoint(x: 2, y: 2)), (.bottomRight, first)
+            ]
+            for (choice, point) in corners {
+                hover.reset(to: choice, screens: frames, pointer: outside)
+                check(hover.update(at: point, hovering: true) == .arm &&
+                      corners.filter { $0.0 != choice }.allSatisfy { !hover.stillInside($0.1) },
+                      "only-the-selected-corner-activates-\(choice.rawValue)")
+            }
+            hover.reset(to: .bottomRight, screens: frames, pointer: first)
+            check(hover.update(at: first, hovering: true) == .none, "enabling-a-parked-corner-requires-reentry")
+            check(hover.update(at: outside, hovering: true) == .cancel && !hover.stillInside(first),
+                  "leaving-the-corner-cancels-dwell")
+            check(hover.update(at: first, hovering: true) == .arm && hover.update(at: first, hovering: true) == .none,
+                  "only-one-dwell-per-visit")
+            check(hover.update(at: second, hovering: true) == .arm && hover.stillInside(second) && !hover.stillInside(first),
+                  "corners-on-separate-displays-are-distinct")
+            check(hover.update(at: second, hovering: false) == .cancel && hover.update(at: second, hovering: true) == .none,
+                  "click-or-drag-consumes-the-current-visit")
+            hover.reset(to: .topLeft, screens: frames, pointer: outside)
+            check(hover.update(at: second, hovering: true) == .none &&
+                  hover.update(at: NSPoint(x: -1279, y: 499), hovering: true) == .arm, "changed-corner-uses-new-screen-edges")
+            hover.reset(to: .off, screens: frames, pointer: outside)
+            check(hover.update(at: first, hovering: true) == .none, "disabled-corner-ignores-motion")
             func settingsContentFits() -> Bool {
                 guard let content = settings.window?.contentView,
                       let stack = content.subviews.first as? NSStackView else { return false }
@@ -246,7 +290,9 @@ enum RuntimeAcceptance {
             let recordingDefaults = UserDefaults(suiteName: recordingDefaultsName)!
             defer { recordingDefaults.removePersistentDomain(forName: recordingDefaultsName) }
             let recordingHotKey = HotKeyController(action: {}, defaults: recordingDefaults)
-            let recorder = PreferencesController(hotKeyController: recordingHotKey, launchAtLoginService: loginService)
+            let occupiedShortcut = HotKeyController.ShortcutError.registrationFailed(OSStatus(eventHotKeyExistsErr))
+            let defaultAlreadyInUse = recordingHotKey.startupRegistrationFailure == occupiedShortcut
+            let recorder = PreferencesController(hotKeyController: recordingHotKey, hotCornerController: hotCorners, launchAtLoginService: loginService)
             recorder.showSettings()
             let recordingWindow = recorder.window!
             let previousShortcut = recordingHotKey.currentShortcut
@@ -273,10 +319,16 @@ enum RuntimeAcceptance {
                   && recordingHotKey.currentShortcut == candidate && recordingWindow.isVisible,
                   "settings-records-and-saves-shortcut-in-place")
             recorder.resetButton?.performClick(nil)
-            if recordingHotKey.currentShortcut != HotKeyController.defaultShortcut {
-                print("Shortcut reset: \(recorder.shortcutStatusLabel?.stringValue ?? "No status")")
+            if defaultAlreadyInUse {
+                check(recordingHotKey.activeShortcut == candidate && recordingHotKey.currentShortcut == candidate
+                      && recorder.shortcutStatusLabel?.stringValue == occupiedShortcut.localizedDescription
+                      && recordingDefaults.integer(forKey: "Aparte.globalShortcut.keyCode") == Int(candidate.keyCode)
+                      && recordingDefaults.integer(forKey: "Aparte.globalShortcut.modifiers") == Int(candidate.modifiers),
+                      "settings-reset-reports-occupied-option-space-and-keeps-working-shortcut")
+            } else {
+                check(recordingHotKey.activeShortcut == HotKeyController.defaultShortcut
+                      && recordingHotKey.currentShortcut == HotKeyController.defaultShortcut, "settings-resets-shortcut-to-option-space")
             }
-            check(recordingHotKey.currentShortcut == HotKeyController.defaultShortcut, "settings-resets-shortcut-to-option-space")
             check(recorder.resetButton?.isEnabled == (recordingHotKey.currentShortcut != HotKeyController.defaultShortcut),
                   "settings-reset-disabled-at-default")
             recorder.shortcutButton?.performClick(nil)
@@ -1433,7 +1485,7 @@ enum RuntimeAcceptance {
                 pad.hide()
                 overlays.hide()
                 let previewHotKey = HotKeyController(action: {}, defaults: defaults)
-                let recorder = PreferencesController(hotKeyController: previewHotKey, launchAtLoginService: loginService)
+                let recorder = PreferencesController(hotKeyController: previewHotKey, hotCornerController: hotCorners, launchAtLoginService: loginService)
                 recorder.showSettings()
                 runInteractivePreview(for: 45)
                 print("Recorder choice: \(previewHotKey.shortcutDescription)")

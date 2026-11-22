@@ -31,6 +31,7 @@ final class PreferencesController: NSObject, NSWindowDelegate {
     }
 
     private weak var hotKeyController: HotKeyController?
+    private let hotCornerController: HotCornerController
     private let launchAtLoginService: any LaunchAtLoginService
     private let openLoginItems: () -> Void
     private var settingsStack: NSStackView?
@@ -57,10 +58,12 @@ final class PreferencesController: NSObject, NSWindowDelegate {
 
     init(
         hotKeyController: HotKeyController?,
+        hotCornerController: HotCornerController,
         launchAtLoginService: any LaunchAtLoginService = SystemLaunchAtLoginService(),
         openLoginItems: @escaping () -> Void = { SMAppService.openSystemSettingsLoginItems() }
     ) {
         self.hotKeyController = hotKeyController
+        self.hotCornerController = hotCornerController
         self.launchAtLoginService = launchAtLoginService
         self.openLoginItems = openLoginItems
         super.init()
@@ -169,6 +172,21 @@ final class PreferencesController: NSObject, NSWindowDelegate {
         stack.addArrangedSubview(shortcutRow)
         let shortcutStatus = label("")
         add(shortcutStatus)
+        divider()
+
+        add(label("Hot corner", heading: true))
+        add(label("Pause in this corner of any display to show your pad. Choose a corner free of other actions."))
+        let corners = NSPopUpButton(frame: .zero, pullsDown: false)
+        corners.identifier = NSUserInterfaceItemIdentifier("hot-corner")
+        corners.setAccessibilityLabel("Hot corner")
+        for corner in HotCorner.allCases {
+            corners.addItem(withTitle: corner.title)
+            corners.lastItem?.representedObject = corner.rawValue
+        }
+        corners.selectItem(withTitle: hotCornerController.selection.title)
+        corners.target = self
+        corners.action = #selector(changeHotCorner(_:))
+        stack.addArrangedSubview(corners)
         divider()
 
         let login = NSButton(checkboxWithTitle: "Launch Aparte at login", target: self, action: #selector(changeLaunchAtLogin))
@@ -349,6 +367,12 @@ final class PreferencesController: NSObject, NSWindowDelegate {
             showShortcutError(error.localizedDescription)
             NSSound.beep()
         }
+    }
+
+    @objc private func changeHotCorner(_ sender: NSPopUpButton) {
+        guard let rawValue = sender.selectedItem?.representedObject as? String,
+              let corner = HotCorner(rawValue: rawValue) else { return }
+        hotCornerController.select(corner)
     }
 
     @objc private func changeLaunchAtLogin() { _ = toggleLaunchAtLogin() }
