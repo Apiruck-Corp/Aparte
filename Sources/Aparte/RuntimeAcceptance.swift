@@ -129,6 +129,11 @@ enum RuntimeAcceptance {
             loginService.shouldFail = false
             settings.showSettings()
             let settingsWindow = settings.window
+            let settingsStack = settingsWindow?.contentView?.subviews.first as? NSStackView
+            let cornerMenu = settingsStack?.arrangedSubviews.compactMap { $0 as? NSPopUpButton }
+                .first { $0.identifier?.rawValue == "hot-corner" }
+            check(cornerMenu?.titleOfSelectedItem == "Off" && cornerMenu?.numberOfItems == 5,
+                  "settings-offers-four-hot-corners-and-defaults-to-off")
             func settingsContentFits() -> Bool {
                 guard let content = settings.window?.contentView,
                       let stack = content.subviews.first as? NSStackView else { return false }
