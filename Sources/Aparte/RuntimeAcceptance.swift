@@ -159,9 +159,12 @@ enum RuntimeAcceptance {
             ]
             for (choice, point) in corners {
                 hover.reset(to: choice, screens: frames, pointer: outside)
-                check(hover.update(at: point, hovering: true) == .arm &&
-                      corners.filter { $0.0 != choice }.allSatisfy { !hover.stillInside($0.1) },
-                      "only-the-selected-corner-activates-\(choice.rawValue)")
+                let armsAtSelectedCorner = hover.update(at: point, hovering: true) == .arm
+                let ignoresOtherCorners = corners.filter { $0.0 != choice }.allSatisfy { other in
+                    hover.reset(to: choice, screens: frames, pointer: outside)
+                    return hover.update(at: other.1, hovering: true) == .none
+                }
+                check(armsAtSelectedCorner && ignoresOtherCorners, "only-the-selected-corner-activates-\(choice.rawValue)")
             }
             hover.reset(to: .bottomRight, screens: frames, pointer: first)
             check(hover.update(at: first, hovering: true) == .none, "enabling-a-parked-corner-requires-reentry")
@@ -171,6 +174,7 @@ enum RuntimeAcceptance {
                   "only-one-dwell-per-visit")
             check(hover.update(at: second, hovering: true) == .arm && hover.stillInside(second) && !hover.stillInside(first),
                   "corners-on-separate-displays-are-distinct")
+            hover.reset(to: .bottomRight, screens: frames, pointer: outside)
             check(hover.update(at: second, hovering: false) == .cancel && hover.update(at: second, hovering: true) == .none,
                   "click-or-drag-consumes-the-current-visit")
             hover.reset(to: .topLeft, screens: frames, pointer: outside)
@@ -178,6 +182,25 @@ enum RuntimeAcceptance {
                   hover.update(at: NSPoint(x: -1279, y: 499), hovering: true) == .arm, "changed-corner-uses-new-screen-edges")
             hover.reset(to: .off, screens: frames, pointer: outside)
             check(hover.update(at: first, hovering: true) == .none, "disabled-corner-ignores-motion")
+
+            if let screen = NSScreen.screens.first {
+                func armDwell(_ corner: HotCorner) -> Bool {
+                    hotCorners.select(corner)
+                    let region = corner.region(in: screen.frame)!
+                    hotCorners.pointerChanged(at: NSPoint(x: screen.frame.midX, y: screen.frame.midY), hovering: true)
+                    hotCorners.pointerChanged(at: NSPoint(x: region.midX, y: region.midY), hovering: true)
+                    return hotCorners.hasPendingDwell
+                }
+                let beforeLayoutChange = armDwell(.bottomRight)
+                hotCorners.screensChanged()
+                check(beforeLayoutChange && !hotCorners.hasPendingDwell, "display-layout-change-cancels-pending-corner")
+                let beforeNewCorner = armDwell(.bottomRight)
+                hotCorners.select(.topLeft)
+                check(beforeNewCorner && !hotCorners.hasPendingDwell, "choosing-another-corner-cancels-pending-dwell")
+                let beforeOff = armDwell(.topLeft)
+                hotCorners.select(.off)
+                check(beforeOff && !hotCorners.hasPendingDwell, "turning-corner-off-cancels-pending-dwell")
+            } else { failed.append("missing-display-for-corner-dwell-checks") }
             func settingsContentFits() -> Bool {
                 guard let content = settings.window?.contentView,
                       let stack = content.subviews.first as? NSStackView else { return false }
@@ -1277,7 +1300,29 @@ enum RuntimeAcceptance {
             overlays.hide()
             let lifecycle = AppDelegate()
             lifecycle.configurePad(document: document, pad: pad)
+            pad.hide()
+            let modal = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+                                styleMask: .titled, backing: .buffered, defer: false)
+            modal.isReleasedWhenClosed = false
+            let session = NSApp.beginModalSession(for: modal)
+            _ = NSApp.runModalSession(session)
+            lifecycle.showPadFromCorner()
+            check(NSApp.modalWindow === modal && !pad.isVisible, "hot-corner-preserves-an-active-modal-dialog")
+            NSApp.endModalSession(session)
+            modal.close()
+            pad.show()
             pad.pinButtonForRuntimeCheck.performClick(nil)
+            let pinnedSheet = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+                                      styleMask: .titled, backing: .buffered, defer: false)
+            pinnedSheet.isReleasedWhenClosed = false
+            pad.window.beginSheet(pinnedSheet)
+            pinnedSheet.makeKey()
+            let keyBeforeCorner = NSApp.keyWindow
+            lifecycle.showPadFromCorner()
+            check(pad.window.attachedSheet === pinnedSheet && keyBeforeCorner === pinnedSheet && NSApp.keyWindow === pinnedSheet,
+                  "hot-corner-preserves-attached-sheet-focus")
+            pad.window.endSheet(pinnedSheet)
+            pinnedSheet.orderOut(nil)
             check(pad.isPinned && pad.window.styleMask.contains(.resizable)
                   && pad.window.level == .floating && lifecycle.focusOverlayCountForRuntimeCheck == 0,
                   "pin-enables-resizing-without-dimming")

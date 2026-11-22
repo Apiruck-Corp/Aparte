@@ -148,7 +148,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func showPadFromCorner() {
+    func showPadFromCorner() {
         guard let padController, NSApp.modalWindow == nil, padController.window.attachedSheet == nil,
               preferencesController?.isCapturingShortcut != true else { return }
         guard padController.isVisible else { showPad(); return }

@@ -63,6 +63,7 @@ final class HotCornerController {
     private var localMonitor: Any?
     private var dwell: Timer?
     private(set) var selection: HotCorner
+    var hasPendingDwell: Bool { dwell?.isValid == true }
 
     init(defaults: UserDefaults = .standard, action: @escaping () -> Void) {
         self.defaults = defaults
@@ -102,7 +103,10 @@ final class HotCornerController {
 
     private func handle(_ event: NSEvent) {
         let point = event.cgEvent?.unflippedLocation ?? NSEvent.mouseLocation
-        let hovering = event.type == .mouseMoved && NSEvent.pressedMouseButtons == 0
+        pointerChanged(at: point, hovering: event.type == .mouseMoved && NSEvent.pressedMouseButtons == 0)
+    }
+
+    func pointerChanged(at point: NSPoint, hovering: Bool) {
         switch hover.update(at: point, hovering: hovering) {
         case .none:
             break
