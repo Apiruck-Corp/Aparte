@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private var documentController: DocumentController?
     private var padController: PadWindowController?
     private var hotKeyController: HotKeyController?
+    private var hotCornerController: HotCornerController?
     private var menuBarController: MenuBarController?
     private var preferencesController: PreferencesController?
     private var escapeMonitor: Any?
@@ -31,7 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         }
 
         hotKeyController = HotKeyController(action: { [weak self] in self?.togglePad() })
-        preferencesController = PreferencesController(hotKeyController: hotKeyController)
+        let hotCorner = HotCornerController { [weak self] in self?.showPadFromCorner() }
+        hotCornerController = hotCorner
+        preferencesController = PreferencesController(hotKeyController: hotKeyController, hotCornerController: hotCorner)
         #if APARTE_DIRECT_UPDATES
         preferencesController?.updateController = updateController
         preferencesController?.onCheckForUpdates = { [weak self] in self?.checkForUpdates() }
@@ -119,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
 
     func applicationWillTerminate(_ notification: Notification) {
         hotKeyController?.invalidate()
+        hotCornerController?.invalidate()
         preferencesController?.closeSettings()
         if let escapeMonitor {
             NSEvent.removeMonitor(escapeMonitor)
@@ -141,6 +145,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
         if NSApp.isHidden { NSApp.unhide(nil) }
         if !padController.isPinned { overlays.show() }
         padController.show()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func showPadFromCorner() {
+        guard let padController, NSApp.modalWindow == nil, padController.window.attachedSheet == nil,
+              preferencesController?.isCapturingShortcut != true else { return }
+        guard padController.isVisible else { showPad(); return }
+        guard padController.isPinned, !padController.window.isKeyWindow else { return }
+        padController.window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
@@ -263,6 +276,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     }
 
     @objc private func screenLayoutChanged() {
+        hotCornerController?.screensChanged()
         guard padController?.isVisible == true else { return }
         if padController?.isPinned != true { overlays.show() }
         padController?.recenter()
