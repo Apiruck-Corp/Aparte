@@ -88,7 +88,10 @@ import AparteCore
             measure("copy-export-pair-\(n)") { ParagraphFormatting.plainText(from: rendered).utf8.count + ParagraphFormatting.html(from: rendered).utf8.count }
             let fixtureRoot = root.appendingPathComponent("fixture-\(n)")
             let doc = try DocumentController(store: PersistenceStore(fileURL: fixtureRoot.appendingPathComponent("aparte.md")))
-            let suite = "ApartePerfAudit-\(UUID().uuidString)"
+            // Kept inside the fixture folder: a named suite leaves an empty plist in
+            // ~/Library/Preferences on every run.
+            try FileManager.default.createDirectory(at: fixtureRoot, withIntermediateDirectories: true)
+            let suite = fixtureRoot.appendingPathComponent("defaults").path
             let defaults = UserDefaults(suiteName: suite)!
             let pad = PadWindowController(document: doc, defaults: defaults, optionsMenu: { NSMenu() })
             pad.setMarkdownForRuntimeCheck(markdown)

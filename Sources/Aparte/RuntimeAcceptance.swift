@@ -103,7 +103,11 @@ enum RuntimeAcceptance {
             retryDocument.saveNow()
             let retrySave = try retryStore.load()
             check(retryDocument.lastSaveError == nil && retrySave == "Retry this note", "save-cache-retries-failed-write")
-            let defaultsName = "AparteRuntimeAcceptance-\(UUID().uuidString)"
+            // Preferences named by a path inside `root` live in that folder and are
+            // deleted with it. A named suite would leave an empty plist in
+            // ~/Library/Preferences on every run, even after removePersistentDomain.
+            try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let defaultsName = root.appendingPathComponent("acceptance-defaults").path
             guard let defaults = UserDefaults(suiteName: defaultsName) else { return 1 }
             defer { defaults.removePersistentDomain(forName: defaultsName) }
             let loginService = AcceptanceLoginService()
@@ -309,7 +313,7 @@ enum RuntimeAcceptance {
                 reopenedHotKey.invalidate()
             } else { failed.append("shortcut-registers-new-choice") }
 
-            let recordingDefaultsName = "AparteSettingsAcceptance-\(UUID().uuidString)"
+            let recordingDefaultsName = root.appendingPathComponent("recording-defaults").path
             let recordingDefaults = UserDefaults(suiteName: recordingDefaultsName)!
             defer { recordingDefaults.removePersistentDomain(forName: recordingDefaultsName) }
             let recordingHotKey = HotKeyController(action: {}, defaults: recordingDefaults)
